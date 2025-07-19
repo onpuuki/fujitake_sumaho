@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1072509148760",
+    "project_id": "fujitake-sumaho",
+    "storage_bucket": "fujitake-sumaho.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1072509148760:android:182144f45c049a7908342d",
+        "android_client_info": {
+          "package_name": "com.example.fujitake_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAbAg7G23kcAdX-Ba0odAJlo1iVlpH6fGI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
