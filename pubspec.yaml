@@ -39,6 +39,7 @@ dependencies:
   clipboard: ^2.0.2 # クリップボード操作用（以前のプロジェクトで使っていた場合）
   image_picker: ^1.1.2 # 画像選択用（以前のプロジェクトで使っていた場合）
   flutter_datetime_picker_plus: ^2.2.0 # 日付/時刻ピッカー用（以前のプロジェクトで使っていた場合）
+  intl: ^0.20.2 # ★ この行を追加 ★
   # --- ここまで追加 ---
 
 dev_dependencies:
