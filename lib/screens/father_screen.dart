@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:fujitake_app/screens/prompt_copy_screen.dart'; // プロンプトコピー画面をインポート
-import 'package:fujitake_app/screens/debug_screen.dart';       // デバッグ画面をインポート
-import 'package:fujitake_app/screens/father_todo_list_screen.dart'; // お父さんのTODOリスト画面をインポート (追加)
-
+import 'package:fujitake_app/screens/prompt_copy_screen.dart';
+import 'package:fujitake_app/screens/debug_screen.dart';
+import 'package:fujitake_app/screens/father_todo_list_screen.dart';
+import 'package:fujitake_app/screens/favorite_websites_list_screen.dart'; // ★追加★ お気に入りサイト画面をインポート
 
 class FatherScreen extends StatelessWidget {
   const FatherScreen({super.key});
@@ -16,46 +16,99 @@ class FatherScreen extends StatelessWidget {
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text(
-              'お父さん機能の画面です',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          children: <Widget>[
+            // お父さんのTODOリストボタン
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10.0),
+              child: SizedBox(
+                width: 280,
+                height: 70,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const FatherTodoListScreen()),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    textStyle: const TextStyle(fontSize: 24),
+                  ),
+                  child: const Text('お父さんのTODOリスト'),
+                ),
+              ),
             ),
-            const SizedBox(height: 20),
-            // お父さんのTODOリストへのボタン
-            ElevatedButton(
-              onPressed: () {
-                // お父さんのTODOリスト画面へ遷移
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const FatherTodoListScreen()),
-                );
-              },
-              child: const Text('お父さんのTODOリスト'),
+            // お気に入りサイトボタン ★追加★
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10.0),
+              child: SizedBox(
+                width: 280,
+                height: 70,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const FavoriteWebsitesListScreen()),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    textStyle: const TextStyle(fontSize: 24),
+                  ),
+                  child: const Text('お気に入りサイト'),
+                ),
+              ),
             ),
-            const SizedBox(height: 10),
-            // プロンプトコピー機能へのボタンを追加
-            ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const PromptCopyScreen()),
-                );
-              },
-              child: const Text('プロンプトコピー'),
+            // プロンプトコピーボタン
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10.0),
+              child: SizedBox(
+                width: 280,
+                height: 70,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const PromptCopyScreen()),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    textStyle: const TextStyle(fontSize: 24),
+                  ),
+                  child: const Text('プロンプトコピー'),
+                ),
+              ),
             ),
-            const SizedBox(height: 10),
-            // デバッグ機能へのボタンを追加
-            ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const DebugScreen()),
-                );
-              },
-              child: const Text('デバッグ機能'),
+            // デバッグ機能ボタン
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10.0),
+              child: SizedBox(
+                width: 280,
+                height: 70,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const DebugScreen()),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    textStyle: const TextStyle(fontSize: 24),
+                  ),
+                  child: const Text('デバッグ機能'),
+                ),
+              ),
             ),
-            // その他の「お父さん機能」のボタンをここに追加
           ],
         ),
       ),

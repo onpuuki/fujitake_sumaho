@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:intl/intl.dart'; // 日付フォーマット用に追加
+import 'package:intl/intl.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:fujitake_app/screens/favorite_todo_management_screen.dart';
+import 'package:fujitake_app/screens/todo_detail_screen.dart';
+import 'package:fujitake_app/utils/date_extensions.dart'; // ★重要★ このインポートが正しいことを確認
+import 'package:flutter_datetime_picker_plus/flutter_datetime_picker_plus.dart';
 
 // アプリケーションIDは仕様の例に基づきハードコード。
-// 実際のアプリでは、環境変数や設定ファイルから取得することが推奨されます。
 const String _appId = 'fujitake_family_app';
 
 class FatherTodoListScreen extends StatefulWidget {
@@ -16,16 +20,17 @@ class FatherTodoListScreen extends StatefulWidget {
 
 class _FatherTodoListScreenState extends State<FatherTodoListScreen> {
   final TextEditingController _todoInputController = TextEditingController();
-  String? _userId; // 現在のユーザーIDを保持
-  DateTime? _selectedDueDate; // 選択された期限日
+  String? _userId;
+
+  DateTime? _selectedDueDate; 
+  final TextEditingController _memoInputController = TextEditingController();
+
 
   @override
   void initState() {
     super.initState();
-    // Firebase Authから現在のユーザーIDを取得
     _userId = FirebaseAuth.instance.currentUser?.uid;
     if (_userId == null) {
-      // ユーザーIDが取得できない場合はエラーメッセージを表示（main.dartで匿名認証されているはずですが念のため）
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('ユーザーIDが取得できませんでした。Firebase認証を確認してください。')),
@@ -36,17 +41,15 @@ class _FatherTodoListScreenState extends State<FatherTodoListScreen> {
 
   @override
   void dispose() {
-    _todoInputController.dispose(); // コントローラーを破棄してメモリリークを防ぐ
+    _todoInputController.dispose();
+    _memoInputController.dispose();
     super.dispose();
   }
 
-  // Firestoreのコレクション参照を取得するヘルパーメソッド
   CollectionReference<Map<String, dynamic>> _getTodoCollection() {
     if (_userId == null) {
-      // ユーザーIDがない場合はFirestore操作ができないため例外をスロー
       throw Exception("ユーザーIDがnullです。Firestoreにアクセスできません。");
     }
-    // 仕様に基づいたコレクションパス: artifacts/{appId}/users/{userId}/fatherTodos
     return FirebaseFirestore.instance
         .collection('artifacts')
         .doc(_appId)
@@ -55,24 +58,40 @@ class _FatherTodoListScreenState extends State<FatherTodoListScreen> {
         .collection('fatherTodos');
   }
 
-  // 日付ピッカーを表示して期限日を選択
-  Future<void> _selectDueDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDueDate ?? DateTime.now(), // 初期値は現在の日付または選択済みの期限日
-      firstDate: DateTime.now(), // 選択可能な最初の日付は今日
-      lastDate: DateTime(2101), // 選択可能な最後の日付
-    );
-    if (picked != null && picked != _selectedDueDate) {
-      setState(() {
-        _selectedDueDate = picked;
-      });
+  CollectionReference<Map<String, dynamic>> _getFavoriteTodoCategoriesCollection() {
+    if (_userId == null) {
+      throw Exception("ユーザーIDがnullです。Firestoreにアクセスできません。");
     }
+    return FirebaseFirestore.instance
+        .collection('artifacts')
+        .doc(_appId)
+        .collection('users')
+        .doc(_userId)
+        .collection('favoriteTodoCategories');
+  }
+
+  // 日付と時刻をまとめて設定するピッカーを表示
+  Future<void> _selectDateTime(BuildContext context, {DateTime? initialDateTime}) async {
+    DatePicker.showDateTimePicker(
+      context,
+      showTitleActions: true,
+      minTime: DateTime.now().subtract(const Duration(days: 365 * 5)),
+      maxTime: DateTime.now().add(const Duration(days: 365 * 10)),
+      onConfirm: (date) {
+        setState(() {
+          _selectedDueDate = date;
+        });
+      },
+      currentTime: initialDateTime ?? DateTime.now(),
+      locale: LocaleType.jp, // 日本語ロケールを設定
+    );
   }
 
   // 新しいTODOを追加する
   Future<void> _addTodo() async {
     final String todoText = _todoInputController.text.trim();
+    final String memoText = _memoInputController.text.trim();
+
     if (todoText.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('TODOを入力してください。')),
@@ -84,12 +103,15 @@ class _FatherTodoListScreenState extends State<FatherTodoListScreen> {
       await _getTodoCollection().add({
         'text': todoText,
         'isCompleted': false,
-        'timestamp': FieldValue.serverTimestamp(), // 作成日時を記録
-        'dueDate': _selectedDueDate != null ? Timestamp.fromDate(_selectedDueDate!) : null, // 期限日を追加
+        'timestamp': FieldValue.serverTimestamp(),
+        'dueDate': _selectedDueDate != null ? Timestamp.fromDate(_selectedDueDate!) : null,
+        'memo': memoText,
+        'imageUrl': null,
       });
-      _todoInputController.clear(); // 入力フィールドをクリア
+      _todoInputController.clear();
+      _memoInputController.clear();
       setState(() {
-        _selectedDueDate = null; // 期限日をリセット
+        _selectedDueDate = null;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('TODOを追加しました！')),
@@ -121,7 +143,6 @@ class _FatherTodoListScreenState extends State<FatherTodoListScreen> {
 
   // TODOを削除する
   Future<void> _deleteTodo(String docId) async {
-    // 削除確認ダイアログを表示
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -132,14 +153,25 @@ class _FatherTodoListScreenState extends State<FatherTodoListScreen> {
             TextButton(
               child: const Text('キャンセル'),
               onPressed: () {
-                Navigator.of(context).pop(); // ダイアログを閉じる
+                Navigator.of(context).pop();
               },
             ),
             TextButton(
               child: const Text('削除'),
               onPressed: () async {
-                Navigator.of(context).pop(); // ダイアログを閉じる
+                Navigator.of(context).pop();
                 try {
+                  final docSnapshot = await _getTodoCollection().doc(docId).get();
+                  final data = docSnapshot.data() as Map<String, dynamic>? ?? {};
+                  final imageUrl = data['imageUrl'] as String?;
+                  if (imageUrl != null && imageUrl.isNotEmpty) {
+                    try {
+                      await FirebaseStorage.instance.refFromURL(imageUrl).delete();
+                    } catch (storageError) {
+                      print('Storageからの画像削除エラー: $storageError');
+                    }
+                  }
+
                   await _getTodoCollection().doc(docId).delete();
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('TODOを削除しました！')),
@@ -158,28 +190,110 @@ class _FatherTodoListScreenState extends State<FatherTodoListScreen> {
     );
   }
 
-  // お気に入りTODOを一括登録する
-  Future<void> _bulkAddFavoriteTodos() async {
-    // ここではサンプルとしてハードコードされたTODOを登録します。
-    // 実際には、別の画面で定義された「お気に入り」テンプレートから取得します。
-    final List<Map<String, dynamic>> favoriteTodos = [
-      {'text': '毎月の請求書支払い', 'dueDate': DateTime.now().add(const Duration(days: 30))},
-      {'text': '毎週のゴミ出し', 'dueDate': DateTime.now().add(const Duration(days: 7))},
-      {'text': '毎日のルーティン（朝）', 'dueDate': DateTime.now().add(const Duration(days: 1))},
-      {'text': '毎日のルーティン（夜）', 'dueDate': DateTime.now().add(const Duration(days: 1))},
-    ];
+  Future<void> _showEditTodoDialog(DocumentSnapshot todoDoc) async {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TodoDetailScreen(todoDocId: todoDoc.id),
+      ),
+    );
+  }
+
+  Future<void> _showFavoriteAddDialog() async {
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('お気に入りTODOを一括登録'),
+          content: StreamBuilder<QuerySnapshot>(
+            stream: _getFavoriteTodoCategoriesCollection().orderBy('order', descending: false).snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                print('Firestore Stream Error (Favorite Categories): ${snapshot.error}');
+                return Text('エラー: ${snapshot.error}');
+              }
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const CircularProgressIndicator();
+              }
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                return const Text('お気に入りカテゴリがありません。\n管理画面で追加してください。');
+              }
+
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: snapshot.data!.docs.map((doc) {
+                  final categoryData = doc.data() as Map<String, dynamic>? ?? {}; 
+                  final categoryName = categoryData['name'] as String? ?? '無題カテゴリ';
+                  final categoryType = categoryData['type'] as String? ?? 'other';
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 5.0),
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        _addFavoriteTodos(doc.id, categoryType);
+                      },
+                      child: Text(categoryName),
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _addFavoriteTodos(String categoryId, String categoryType) async {
+    final QuerySnapshot favoriteTodosSnapshot = await _getFavoriteTodoCategoriesCollection()
+        .doc(categoryId)
+        .collection('favoriteTodos')
+        .orderBy('order', descending: false)
+        .get();
+
+    if (favoriteTodosSnapshot.docs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('このお気に入りカテゴリにはTODOがありません。')),
+      );
+      return;
+    }
+
+    DateTime now = DateTime.now();
+    DateTime calculatedDueDate;
+
+    switch (categoryType) {
+      case 'daily':
+        calculatedDueDate = now.endOfDay();
+        break;
+      case 'weekly':
+        calculatedDueDate = now.nextSunday().endOfDay();
+        break;
+      case 'yearly':
+        calculatedDueDate = DateTime(now.year + 1, now.month, now.day).subtract(const Duration(days: 1)).endOfDay();
+        break;
+      default:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('不明なカテゴリタイプが設定されています。')),
+        );
+        return;
+    }
 
     try {
-      for (var todo in favoriteTodos) {
+      for (var doc in favoriteTodosSnapshot.docs) {
+        final todoItemData = doc.data() as Map<String, dynamic>? ?? {}; 
+        final todoText = todoItemData['text'] as String? ?? '無題のTODO';
+        final todoMemo = todoItemData['memo'] as String? ?? '';
         await _getTodoCollection().add({
-          'text': todo['text'],
+          'text': todoText,
           'isCompleted': false,
           'timestamp': FieldValue.serverTimestamp(),
-          'dueDate': Timestamp.fromDate(todo['dueDate']),
+          'dueDate': Timestamp.fromDate(calculatedDueDate),
+          'memo': todoMemo,
+          'imageUrl': null,
         });
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('お気に入りTODOを一括登録しました！')),
+        SnackBar(content: Text('お気に入りTODOを一括登録しました！')),
       );
     } catch (e) {
       print('お気に入りTODO一括登録エラー: $e');
@@ -189,11 +303,87 @@ class _FatherTodoListScreenState extends State<FatherTodoListScreen> {
     }
   }
 
+  Future<void> _bulkDeleteAllTodos() async {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('すべてのTODOを削除'),
+          content: const Text('すべてのTODOを削除してもよろしいですか？この操作は元に戻せません。'),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('キャンセル'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text('すべて削除'),
+              onPressed: () async {
+                Navigator.of(context).pop();
+                try {
+                  final QuerySnapshot todosSnapshot = await _getTodoCollection().get();
+                  if (todosSnapshot.docs.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('削除するTODOはありません。')),
+                    );
+                    return;
+                  }
+
+                  final WriteBatch batch = FirebaseFirestore.instance.batch();
+                  for (var doc in todosSnapshot.docs) {
+                    final data = doc.data() as Map<String, dynamic>? ?? {};
+                    final imageUrl = data['imageUrl'] as String?;
+                    if (imageUrl != null && imageUrl.isNotEmpty) {
+                      try {
+                        await FirebaseStorage.instance.refFromURL(imageUrl).delete();
+                      } catch (storageError) {
+                        print('Storageからの画像削除エラー (一括削除時): $storageError');
+                      }
+                    }
+                    batch.delete(doc.reference);
+                  }
+                  await batch.commit();
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('すべてのTODOを削除しました！')),
+                  );
+                } catch (e) {
+                  print('TODO一括削除エラー: $e');
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('すべてのTODOの削除に失敗しました: $e')),
+                  );
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('お父さんのTODOリスト'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const FavoriteTodoManagementScreen()),
+              );
+            },
+            tooltip: 'お気に入りTODOを管理',
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_sweep),
+            onPressed: _bulkDeleteAllTodos,
+            tooltip: 'すべてのTODOを削除',
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -201,55 +391,67 @@ class _FatherTodoListScreenState extends State<FatherTodoListScreen> {
             padding: const EdgeInsets.all(8.0),
             child: Column(
               children: [
+                TextField(
+                  controller: _todoInputController,
+                  decoration: const InputDecoration(
+                    hintText: '新しいTODOを入力',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                  onSubmitted: (_) => _addTodo(),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _memoInputController,
+                  decoration: const InputDecoration(
+                    hintText: '備考（メモ）',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                  maxLines: 2,
+                  keyboardType: TextInputType.multiline,
+                ),
+                const SizedBox(height: 8),
                 Row(
                   children: [
                     Expanded(
-                      child: TextField(
-                        controller: _todoInputController,
-                        decoration: InputDecoration(
-                          hintText: '新しいTODOを入力',
-                          border: const OutlineInputBorder(),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-                          // 期限日が表示されるようにする
-                          suffixIcon: _selectedDueDate == null
-                              ? null
-                              : TextButton(
-                                  onPressed: () {
-                                    setState(() {
-                                      _selectedDueDate = null; // 期限日をクリア
-                                    });
-                                  },
-                                  child: Text(
-                                    DateFormat('MM/dd').format(_selectedDueDate!),
-                                    style: const TextStyle(color: Colors.blue),
-                                  ),
-                                ),
-                        ),
-                        onSubmitted: (_) => _addTodo(), // Enterキーで追加
+                      child: Text(
+                        _selectedDueDate == null
+                            ? '期限日: 未設定'
+                            : '期限日: ${DateFormat('MM/dd HH:mm').format(_selectedDueDate!)}',
+                        style: const TextStyle(fontSize: 16),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    // 日付ピッカーボタン
                     IconButton(
                       icon: const Icon(Icons.calendar_today),
-                      onPressed: () => _selectDueDate(context),
+                      onPressed: () => _selectDateTime(context, initialDateTime: _selectedDueDate),
+                      tooltip: '期限日を設定',
                     ),
+                    if (_selectedDueDate != null)
+                      IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          setState(() {
+                            _selectedDueDate = null;
+                          });
+                        },
+                        tooltip: '期限日をクリア',
+                      ),
                     const SizedBox(width: 8),
                     ElevatedButton(
                       onPressed: _addTodo,
                       style: ElevatedButton.styleFrom(
-                        minimumSize: const Size(60, 48), // ボタンの最小サイズを設定
+                        minimumSize: const Size(60, 48),
                       ),
                       child: const Text('追加'),
                     ),
                   ],
                 ),
                 const SizedBox(height: 10),
-                // お気に入りから一括登録ボタン
                 Align(
                   alignment: Alignment.centerRight,
                   child: ElevatedButton.icon(
-                    onPressed: _bulkAddFavoriteTodos,
+                    onPressed: _showFavoriteAddDialog,
                     icon: const Icon(Icons.star),
                     label: const Text('お気に入りから一括登録'),
                   ),
@@ -258,12 +460,10 @@ class _FatherTodoListScreenState extends State<FatherTodoListScreen> {
             ),
           ),
           Expanded(
-            // StreamBuilderでFirestoreのリアルタイム更新をリッスン
             child: _userId == null
-                ? const Center(child: CircularProgressIndicator()) // ユーザーID取得中はローディング表示
+                ? const Center(child: CircularProgressIndicator())
                 : StreamBuilder<QuerySnapshot>(
                     stream: _getTodoCollection()
-                        // 期限日がnullでないものを先に、期限日順（昇順）、その後作成日時順（降順）でソート
                         .orderBy('dueDate', descending: false)
                         .orderBy('timestamp', descending: true)
                         .snapshots(),
@@ -281,19 +481,17 @@ class _FatherTodoListScreenState extends State<FatherTodoListScreen> {
                         return const Center(child: Text('TODOはまだありません。'));
                       }
 
-                      // TODOリストの表示 (FlatListの代わりにListView.builderを使用)
                       return ListView.builder(
                         itemCount: snapshot.data!.docs.length,
                         itemBuilder: (context, index) {
                           DocumentSnapshot doc = snapshot.data!.docs[index];
-                          Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-                          bool isCompleted = data['isCompleted'] ?? false;
-                          String text = data['text'] ?? '無題のTODO';
+                          Map<String, dynamic> data = doc.data() as Map<String, dynamic>? ?? {}; 
+                          bool isCompleted = data['isCompleted'] as bool? ?? false;
+                          String text = data['text'] as String? ?? '無題のTODO';
                           Timestamp? dueDateTimestamp = data['dueDate'] as Timestamp?;
                           String? dueDateText;
                           if (dueDateTimestamp != null) {
-                            // 日付と時刻をフォーマット
-                            dueDateText = DateFormat('MM/dd HH:mm').format(dueDateTimestamp.toDate());
+                            dueDateText = DateFormat('yyyy/MM/dd HH:mm').format(dueDateTimestamp.toDate());
                           }
 
                           return Card(
@@ -317,18 +515,16 @@ class _FatherTodoListScreenState extends State<FatherTodoListScreen> {
                               ),
                               subtitle: dueDateText != null
                                   ? Text('期限: $dueDateText')
-                                  : null, // 期限日を表示
-                              // 長押しで削除確認ダイアログを表示
+                                  : null,
                               onLongPress: () => _deleteTodo(doc.id),
-                              // TODO: タップで詳細画面に遷移するロジックをここに追加
-                              // onTap: () {
-                              //   Navigator.push(
-                              //     context,
-                              //     MaterialPageRoute(
-                              //       builder: (context) => FatherTodoDetailScreen(todoId: doc.id),
-                              //     ),
-                              //   );
-                              // },
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => TodoDetailScreen(todoDocId: doc.id),
+                                  ),
+                                );
+                              },
                             ),
                           );
                         },
